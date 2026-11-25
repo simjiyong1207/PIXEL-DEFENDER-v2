@@ -25,6 +25,7 @@ st.markdown("""
 
 - W / A / S / D 또는 방향키: 이동
 - SPACE: 발사
+- Q: 궁극기 (15초 재사용 대기시간)
 - P: 일시정지
 - R: 다시 시작
 
@@ -58,6 +59,7 @@ button:active{background:#28518a}
 <span id="level">LEVEL 1</span>
 <span id="lives" class="life-display">❤️ ❤️ ❤️ LIVES: 3</span>
 <span id="weapon">WEAPON 1</span>
+<span id="ult">ULT: READY (Q)</span>
 </div>
 
 <canvas id="game" width="480" height="560" tabindex="0"></canvas>
@@ -72,7 +74,7 @@ button:active{background:#28518a}
 <button id="pause">Ⅱ</button>
 <button id="restart">↻</button>
 </div>
-<div class="hint">WASD / 방향키 이동 · SPACE 발사 · P 일시정지 · R 재시작</div>
+<div class="hint">WASD / 방향키 이동 · SPACE 발사 · Q 궁극기 · P 일시정지 · R 재시작</div>
 </div>
 
 <script>
@@ -87,12 +89,14 @@ let keys={},score=0,best=Number(localStorage.getItem('pixelDefenderBest')||0);
 let lives=3,level=1,state='title',paused=false,frame=0;
 let player,shots,foeShots,enemies,drops,particles,boss;
 let fireTick=0,enemyDir=1,shake=0;
+let ultCooldown=0;
+const ULT_COOLDOWN=900;
 
 function reset(){
  score=0;lives=3;level=1;frame=0;paused=false;state='playing';
  player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
  shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
- fireTick=0;enemyDir=1;shake=0;
+ fireTick=0;enemyDir=1;shake=0;ultCooldown=0;
  wave();hud();c.focus();
 }
 
@@ -121,7 +125,8 @@ function hud(){
  $('best').textContent='BEST '+String(best).padStart(4,'0');
  $('level').textContent='LEVEL '+level;
  $('lives').textContent='❤️ '.repeat(Math.max(0,lives))+' LIVES: '+lives;
- $('weapon').textContent='WEAPON '+player.weapon;
+ $('weapon').textContent='WEAPON '+player.weapon+'/5';
+ $('ult').textContent=ultCooldown<=0?'ULT: READY (Q)':'ULT: '+Math.ceil(ultCooldown/60)+'s';
 }
 
 function rect(x,y,w,h,col){
@@ -193,18 +198,54 @@ function drop(x,y){
 function fire(){
  if(fireTick>0||state!=='playing'||paused)return;
  const mid=player.x+player.w/2;
- if(player.weapon===1){
-  shots.push({x:mid-1,y:player.y-8,w:3,h:10,d:1});
- }else if(player.weapon===2){
-  shots.push({x:mid-8,y:player.y-8,w:3,h:10,d:1},{x:mid+5,y:player.y-8,w:3,h:10,d:1});
- }else{
-  shots.push(
-   {x:mid-1,y:player.y-8,w:3,h:10,d:2},
-   {x:mid-10,y:player.y,w:3,h:8,d:1},
-   {x:mid+8,y:player.y,w:3,h:8,d:1}
-  );
+
+ // 무기 레벨에 따라 발사 탄환 수와 공격력이 증가합니다.
+ const patterns={
+  1:[{x:0,d:1}],
+  2:[{x:-7,d:1},{x:7,d:1}],
+  3:[{x:-10,d:1},{x:0,d:2},{x:10,d:1}],
+  4:[{x:-16,d:1},{x:-8,d:1},{x:0,d:2},{x:8,d:1},{x:16,d:1}],
+  5:[{x:-20,d:1},{x:-13,d:1},{x:-6,d:2},{x:0,d:3},{x:6,d:2},{x:13,d:1},{x:20,d:1}]
+ };
+
+ patterns[player.weapon].forEach(s=>{
+  shots.push({x:mid+s.x-1,y:player.y-8,w:3,h:10,d:s.d});
+ });
+
+ fireTick=player.weapon>=4?7:(player.weapon===3?8:11);
+}
+
+function useUltimate(){
+ if(state!=='playing'||paused||ultCooldown>0)return;
+
+ ultCooldown=ULT_COOLDOWN;
+
+ // 화면의 적 탄환을 제거하고 일반 적을 모두 처치합니다.
+ foeShots=[];
+
+ for(let i=enemies.length-1;i>=0;i--){
+  const e=enemies[i];
+  burst(e.x+e.w/2,e.y+e.h/2,'#73fbd3',28);
+  score+=e.type===2?20:10;
+  enemies.splice(i,1);
  }
- fireTick=player.weapon===3?8:11;
+
+ // 보스에게도 강력한 피해를 줍니다.
+ if(boss){
+  burst(boss.x+boss.w/2,boss.y+boss.h/2,'#c17bff',45);
+  boss.hp-=Math.max(50,Math.floor(boss.max*.30));
+
+  if(boss.hp<=0){
+   score+=150;
+   burst(boss.x+48,boss.y+25,'#c17bff',70);
+   drop(boss.x+42,boss.y+40);
+   boss=null;
+   level++;
+   wave();
+  }
+ }
+
+ hud();
 }
 
 function damagePlayer(){
@@ -212,6 +253,7 @@ function damagePlayer(){
  lives--;player.inv=75;shake=9;
  burst(player.x+15,player.y+15,'#73fbd3',32);
  hud();
+
  if(lives<=0){
   burst(player.x+15,player.y+15,'#ff9b54',90);
   state='over';
@@ -230,8 +272,10 @@ function enemyShoot(){
  const shooters=Math.min(enemies.length,1+Math.floor(level/3));
  const bulletCount=1+Math.floor(level/5);
  const spread=Math.min(.16+level*.003,.42);
+
  for(let n=0;n<shooters;n++){
   const e=enemies[Math.floor(Math.random()*enemies.length)];
+
   for(let k=0;k<bulletCount;k++){
    const lane=k-(bulletCount-1)/2;
    foeShots.push({
@@ -251,7 +295,14 @@ function update(){
   }
   return;
  }
+
  frame++;
+
+ // 궁극기 재사용 대기시간
+ if(ultCooldown>0){
+  ultCooldown--;
+  if(ultCooldown%60===0)hud();
+ }
 
  if(keys.ArrowLeft||keys.a||keys.A)player.x-=player.speed;
  if(keys.ArrowRight||keys.d||keys.D)player.x+=player.speed;
@@ -276,31 +327,42 @@ function update(){
 
  // 적 이동 속도도 레벨과 함께 무한히 상승
  let edge=false;
+
  enemies.forEach(e=>{
   e.x+=enemyDir*(.9+level*.18+Math.pow(level,1.15)*.035)*(e.type===1?1.35:1);
   if(e.x<5||e.x+e.w>W-5)edge=true;
  });
+
  if(edge){
   enemyDir*=-1;
   enemies.forEach(e=>e.y+=12+Math.min(level*.25,10));
  }
 
- // 레벨이 오를수록 발사 간격 단축, 발사하는 적 수와 탄환 수 증가
+ // 레벨이 오를수록 적의 공격 빈도와 탄환 수 증가
  const fireInterval=Math.max(7,48-level*2);
  if(frame%fireInterval===0)enemyShoot();
 
  for(let i=enemies.length-1;i>=0;i--){
   const e=enemies[i];
+
   if(overlap(e,player)||e.y+e.h>=player.y){
    burst(e.x+e.w/2,e.y+e.h/2,'#ff6b8a',24);
-   enemies.splice(i,1);damagePlayer();continue;
+   enemies.splice(i,1);
+   damagePlayer();
+   continue;
   }
+
   for(let j=shots.length-1;j>=0;j--){
    if(overlap(shots[j],e)){
-    e.hp-=shots[j].d;shots.splice(j,1);
+    e.hp-=shots[j].d;
+    shots.splice(j,1);
+
     if(e.hp<=0){
-     enemies.splice(i,1);score+=e.type===2?20:10;
-     burst(e.x+12,e.y,'#ff6b8a');drop(e.x+8,e.y);hud();
+     enemies.splice(i,1);
+     score+=e.type===2?20:10;
+     burst(e.x+12,e.y,'#ff6b8a');
+     drop(e.x+8,e.y);
+     hud();
     }
     break;
    }
@@ -310,10 +372,13 @@ function update(){
  if(boss){
   boss.x+=boss.dir*(2+level*.12);
   if(boss.x<5||boss.x+boss.w>W-5)boss.dir*=-1;
+
   boss.fire++;
+
   if(boss.fire>Math.max(8,30-level*1.2)){
    boss.fire=0;
    const count=3+Math.floor(level/3);
+
    for(let k=0;k<count;k++){
     const lane=k-(count-1)/2;
     foeShots.push({
@@ -323,32 +388,45 @@ function update(){
     });
    }
   }
+
   for(let j=shots.length-1;j>=0;j--){
    if(overlap(shots[j],boss)){
-    boss.hp-=shots[j].d;shots.splice(j,1);
+    boss.hp-=shots[j].d;
+    shots.splice(j,1);
+
     if(boss.hp<=0){
-     score+=150;burst(boss.x+48,boss.y+25,'#c17bff',70);
-     drop(boss.x+42,boss.y+40);boss=null;level++;wave();hud();
+     score+=150;
+     burst(boss.x+48,boss.y+25,'#c17bff',70);
+     drop(boss.x+42,boss.y+40);
+     boss=null;
+     level++;
+     wave();
+     hud();
     }
     break;
    }
   }
+
   if(boss&&overlap(boss,player))damagePlayer();
  }
 
  foeShots.forEach(s=>{
   if(overlap(s,player)){
-   s.y=H+20;damagePlayer();
+   s.y=H+20;
+   damagePlayer();
   }
  });
 
  for(let i=drops.length-1;i>=0;i--){
   if(overlap(drops[i],player)){
    const d=drops[i];
-   if(d.kind==='weapon')player.weapon=Math.min(3,player.weapon+1);
+
+   if(d.kind==='weapon')player.weapon=Math.min(5,player.weapon+1);
    else lives=Math.min(5,lives+1);
+
    burst(d.x,d.y,d.kind==='weapon'?'#f8d66d':'#73fbd3');
-   drops.splice(i,1);hud();
+   drops.splice(i,1);
+   hud();
   }
  }
 
@@ -363,41 +441,52 @@ function update(){
 
 function overlay(title,line1,line2){
  rect(0,0,W,H,'#070b18dd');
- g.textAlign='center';g.fillStyle='#73fbd3';g.font='bold 24px monospace';
+ g.textAlign='center';
+ g.fillStyle='#73fbd3';
+ g.font='bold 24px monospace';
  g.fillText(title,W/2,H/2-36);
- g.fillStyle='#e8f1ff';g.font='14px monospace';
+
+ g.fillStyle='#e8f1ff';
+ g.font='14px monospace';
  g.fillText(line1,W/2,H/2+2);
  g.fillText(line2,W/2,H/2+28);
 }
 
 function draw(){
  g.save();
+
  if(shake>0){
   g.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
   shake--;
  }
+
  g.clearRect(-10,-10,W+20,H+20);
 
  for(let i=0;i<65;i++){
   const x=(i*97)%W,y=(i*139+frame*.45)%H;
   rect(x,y,2,2,'#24385e');
  }
+
  for(let y=H-110;y<H;y+=18)rect(0,y,W,1,'#111d39');
 
  shots.forEach(s=>{
   rect(s.x,s.y,s.w,s.h,'#f8d66d');
   rect(s.x+1,s.y+2,1,4,'#fff');
  });
+
  foeShots.forEach(s=>{
   rect(s.x,s.y,s.w,s.h,'#ff795e');
   rect(s.x+1,s.y+2,Math.max(2,s.w-2),4,'#ffd0a8');
  });
+
  enemies.forEach(enemyDraw);
  bossDraw();
 
  drops.forEach(d=>{
   rect(d.x,d.y,12,12,d.kind==='weapon'?'#f8d66d':'#73fbd3');
-  g.fillStyle='#101a32';g.font='10px monospace';g.textAlign='center';
+  g.fillStyle='#101a32';
+  g.font='10px monospace';
+  g.textAlign='center';
   g.fillText(d.kind==='weapon'?'W':'+',d.x+6,d.y+10);
  });
 
@@ -410,29 +499,40 @@ function draw(){
  // 플레이어는 항상 오버레이보다 위에 그려서 잘 보이게 함
  if(player&&(player.inv===0||Math.floor(frame/5)%2===0)){
   ship(player.x,player.y);
-  g.strokeStyle='#b8fff4';g.lineWidth=2;
+  g.strokeStyle='#b8fff4';
+  g.lineWidth=2;
   g.strokeRect(player.x-2,player.y-2,player.w+4,player.h+5);
-  g.shadowColor='#73fbd3';g.shadowBlur=12;
+  g.shadowColor='#73fbd3';
+  g.shadowBlur=12;
   g.strokeRect(player.x-1,player.y-1,player.w+2,player.h+2);
   g.shadowBlur=0;
  }
+
  g.restore();
 }
 
-function loop(){update();draw();requestAnimationFrame(loop)}
+function loop(){
+ update();
+ draw();
+ requestAnimationFrame(loop);
+}
 
 function bind(id,key){
  const el=$(id);
  const down=e=>{e.preventDefault();keys[key]=true};
  const up=e=>{e.preventDefault();keys[key]=false};
+
  el.addEventListener('pointerdown',down);
  el.addEventListener('pointerup',up);
  el.addEventListener('pointerleave',up);
  el.addEventListener('pointercancel',up);
 }
 
-bind('left','ArrowLeft');bind('right','ArrowRight');
-bind('up','ArrowUp');bind('down','ArrowDown');bind('fire','fire');
+bind('left','ArrowLeft');
+bind('right','ArrowRight');
+bind('up','ArrowUp');
+bind('down','ArrowDown');
+bind('fire','fire');
 
 $('start').onclick=reset;
 $('restart').onclick=reset;
@@ -442,16 +542,22 @@ c.addEventListener('pointerdown',()=>c.focus());
 
 window.addEventListener('keydown',e=>{
  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'].includes(e.key))e.preventDefault();
+
  keys[e.key]=true;
+
  if(e.key==='Enter'&&state!=='playing')reset();
  if((e.key==='p'||e.key==='P')&&state==='playing')paused=!paused;
+ if((e.key==='q'||e.key==='Q')&&!e.repeat)useUltimate();
  if(e.key==='r'||e.key==='R')reset();
 });
+
 window.addEventListener('keyup',e=>{keys[e.key]=false});
 
 player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
 shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
-hud();loop();
+
+hud();
+loop();
 })();
 </script>
 </body>
@@ -463,7 +569,8 @@ components.html(game_html,height=900,scrolling=False)
 with st.expander("📦 게임 기능 안내"):
     st.markdown("""
     - 보스 몬스터: 3레벨마다 등장
-    - 무기 업그레이드: 최대 3단계
+    - 무기 업그레이드: 최대 5단계
+    - Q 궁극기: 일반 적과 적 탄환 제거, 보스에게 큰 피해 (15초 재사용 대기시간)
     - 아이템 드롭: 무기 및 회복
     - 적 종류: 기본형, 빠른 적, 내구력 높은 적
     - 적과 직접 충돌 시 피격
@@ -473,4 +580,4 @@ with st.expander("📦 게임 기능 안내"):
     - 최고 점수: 브라우저 localStorage 저장
     """)
 
-st.caption("PIXEL DEFENDER v4 · Streamlit + HTML Canvas")
+st.caption("PIXEL DEFENDER v5 · Streamlit + HTML Canvas")
