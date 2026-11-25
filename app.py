@@ -11,34 +11,25 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-.stApp {
-    background: #090d1b;
-    color: #e8f1ff;
-}
-h1 {
-    font-family: 'Press Start 2P', monospace !important;
-    color: #73fbd3;
-}
-.block-container {
-    max-width: 1000px;
-    padding-top: 2rem;
-}
+.stApp { background:#090d1b; color:#e8f1ff; }
+h1 { font-family:'Press Start 2P',monospace!important; color:#73fbd3; }
+.block-container { max-width:1000px; padding-top:2rem; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("PIXEL DEFENDER")
-st.caption("BOSS UPDATE · 픽셀 우주 슈팅")
+st.caption("INFINITE BOSS UPDATE · 픽셀 우주 슈팅")
 
 st.markdown("""
 **조작법**
 
-- ← → 또는 A / D : 이동
-- SPACE : 발사
-- P : 일시정지
-- R : 다시 시작
+- W / A / S / D 또는 방향키: 이동
+- SPACE: 발사
+- P: 일시정지
+- R: 다시 시작
 
-적을 처치해 아이템을 얻고 무기를 강화하세요.
-3레벨마다 강력한 보스가 등장합니다. 레벨이 오를수록 적이 빨라지고 공격이 거세집니다.
+적과 부딪히거나 적의 탄환에 맞으면 목숨을 잃습니다.
+레벨이 올라갈수록 적의 공격이 계속 강해집니다!
 """)
 
 game_html = r"""
@@ -46,967 +37,439 @@ game_html = r"""
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-
 <style>
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    background: #090d1b;
-    color: #e8f1ff;
-    font-family: monospace;
-}
-
-.wrap {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 9px;
-}
-
-.hud {
-    width: min(720px, 100%);
-    display: flex;
-    justify-content: space-between;
-    gap: 6px;
-    flex-wrap: wrap;
-    color: #73fbd3;
-    font-weight: bold;
-    font-size: 13px;
-}
-
-canvas {
-    width: min(720px, 100%);
-    height: auto;
-    image-rendering: pixelated;
-    border: 3px solid #33466f;
-    background: #070b18;
-}
-
-.controls {
-    display: flex;
-    gap: 8px;
-    width: min(720px, 100%);
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-button {
-    background: #172444;
-    color: #e8f1ff;
-    border: 2px solid #5474ad;
-    padding: 11px 16px;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 15px;
-    touch-action: none;
-}
-
-button:active {
-    background: #28518a;
-}
-
-.hint {
-    color: #9fb0d6;
-    font-size: 12px;
-    text-align: center;
-}
+*{box-sizing:border-box}
+body{margin:0;background:#090d1b;color:#e8f1ff;font-family:monospace}
+.wrap{width:100%;display:flex;flex-direction:column;align-items:center;gap:9px}
+.hud{width:min(720px,100%);display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;color:#73fbd3;font-weight:bold;font-size:13px}
+canvas{width:min(720px,100%);height:auto;image-rendering:pixelated;border:3px solid #5474ad;background:#070b18;outline:none}
+.controls{display:flex;gap:8px;width:min(720px,100%);justify-content:center;flex-wrap:wrap}
+button{background:#172444;color:#e8f1ff;border:2px solid #5474ad;padding:11px 16px;border-radius:8px;font-weight:bold;font-size:15px;touch-action:none}
+button:active{background:#28518a}
+.hint{color:#9fb0d6;font-size:12px;text-align:center}
 </style>
 </head>
-
 <body>
-
 <div class="wrap">
-
 <div class="hud">
-    <span id="score">SCORE 0000</span>
-    <span id="best">BEST 0000</span>
-    <span id="lives">LIVES ♥♥♥</span>
-    <span id="weapon">WEAPON 1</span>
+<span id="score">SCORE 0000</span>
+<span id="best">BEST 0000</span>
+<span id="level">LEVEL 1</span>
+<span id="lives">LIVES ♥♥♥</span>
+<span id="weapon">WEAPON 1</span>
 </div>
 
-<canvas id="game" width="480" height="560"></canvas>
+<canvas id="game" width="480" height="560" tabindex="0"></canvas>
 
 <div class="controls">
-    <button id="start">START</button>
-    <button id="left">◀</button>
-    <button id="fire">FIRE</button>
-    <button id="right">▶</button>
-    <button id="pause">Ⅱ</button>
-    <button id="restart">↻</button>
+<button id="start">START</button>
+<button id="left">◀</button>
+<button id="up">▲</button>
+<button id="fire">FIRE</button>
+<button id="down">▼</button>
+<button id="right">▶</button>
+<button id="pause">Ⅱ</button>
+<button id="restart">↻</button>
 </div>
-
-<div class="hint">
-← → / A D 이동 · SPACE 발사 · P 일시정지 · R 재시작
-</div>
-
+<div class="hint">WASD / 방향키 이동 · SPACE 발사 · P 일시정지 · R 재시작</div>
 </div>
 
 <script>
-(() => {
+(()=>{
+const c=document.getElementById('game');
+const g=c.getContext('2d');
+const W=480,H=560;
+g.imageSmoothingEnabled=false;
+const $=id=>document.getElementById(id);
 
-const c = document.getElementById('game');
-const g = c.getContext('2d');
+let keys={},score=0,best=Number(localStorage.getItem('pixelDefenderBest')||0);
+let lives=3,level=1,state='title',paused=false,frame=0;
+let player,shots,foeShots,enemies,drops,particles,boss;
+let fireTick=0,enemyDir=1,shake=0;
 
-const W = 480;
-const H = 560;
-
-g.imageSmoothingEnabled = false;
-
-const $ = id => document.getElementById(id);
-
-let keys = {};
-
-let score = 0;
-let best = Number(localStorage.getItem('pixelDefenderBest') || 0);
-
-let lives = 3;
-let level = 1;
-
-let state = 'title';
-let paused = false;
-let frame = 0;
-
-let player;
-let shots;
-let foeShots;
-let enemies;
-let drops;
-let particles;
-let boss;
-
-let fireTick;
-let enemyDir;
-
-function reset() {
-
-    score = 0;
-    lives = 3;
-    level = 1;
-    frame = 0;
-
-    paused = false;
-    state = 'playing';
-    boss = null;
-
-    player = {
-        x: W / 2 - 12,
-        y: H - 55,
-        w: 24,
-        h: 20,
-        speed: 4,
-        inv: 0,
-        weapon: 1
-    };
-
-    shots = [];
-    foeShots = [];
-    enemies = [];
-    drops = [];
-    particles = [];
-
-    fireTick = 0;
-    enemyDir = 1;
-
-    wave();
-    hud();
+function reset(){
+ score=0;lives=3;level=1;frame=0;paused=false;state='playing';
+ player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
+ shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
+ fireTick=0;enemyDir=1;shake=0;
+ wave();hud();c.focus();
 }
 
-function wave() {
+function wave(){
+ enemies=[];boss=null;
+ const count=Math.min(6+level*2,24);
+ for(let i=0;i<count;i++){
+  const type=(i+level)%3;
+  enemies.push({
+   x:20+(i%6)*74,
+   y:48+Math.floor(i/6)*43,
+   w:type===1?28:24,h:20,type,
+   hp:type===2?2+Math.floor(level/4):1+Math.floor(level/18),
+   phase:Math.random()*6.28
+  });
+ }
+}
 
-    enemies = [];
-    boss = null;
+function makeBoss(){
+ const hp=35+level*9+Math.floor(level*level*.12);
+ boss={x:W/2-48,y:48,w:96,h:54,hp,max:hp,dir:1,fire:0};
+}
 
-    const count = Math.min(6 + level * 2, 18);
+function hud(){
+ $('score').textContent='SCORE '+String(score).padStart(4,'0');
+ $('best').textContent='BEST '+String(best).padStart(4,'0');
+ $('level').textContent='LEVEL '+level;
+ $('lives').textContent='LIVES '+'♥'.repeat(Math.max(0,lives))+'♡'.repeat(Math.max(0,3-lives));
+ $('weapon').textContent='WEAPON '+player.weapon;
+}
 
-    for (let i = 0; i < count; i++) {
+function rect(x,y,w,h,col){
+ g.fillStyle=col;g.fillRect(Math.round(x),Math.round(y),w,h);
+}
 
-        const type = (i + level) % 3;
+function ship(x,y){
+ // 밝은 외곽과 넓은 실루엣으로 우주선을 선명하게 표현
+ rect(x+13,y,4,5,'#ffffff');
+ rect(x+10,y+5,10,5,'#9ffff0');
+ rect(x+6,y+10,18,7,'#48e6d0');
+ rect(x+2,y+17,26,7,'#20b9c5');
+ rect(x,y+21,7,8,'#f8d66d');
+ rect(x+23,y+21,7,8,'#f8d66d');
+ rect(x+10,y+17,10,8,'#eaffff');
+ rect(x+12,y+18,6,5,'#2873a8');
+ rect(x+5,y+25,5,5,'#ff9b54');
+ rect(x+20,y+25,5,5,'#ff9b54');
+ const flame=4+(frame%6<3?4:0);
+ rect(x+7,y+29,4,flame,'#ffcf5c');
+ rect(x+19,y+29,4,flame,'#ffcf5c');
+}
 
-        enemies.push({
-            x: 25 + (i % 6) * 72,
-            y: 55 + Math.floor(i / 6) * 48,
-            w: type === 1 ? 28 : 24,
-            h: 20,
-            type: type,
-            hp: type === 2 ? 2 + Math.floor(level / 5) : 1,
-            phase: Math.random() * 6.28
-        });
+function enemyDraw(e){
+ const colors=['#ff6b8a','#b58cff','#ffad5c'];
+ const col=colors[e.type],x=e.x,y=e.y+Math.sin(frame/12+e.phase)*2;
+ rect(x+4,y,16,4,col);rect(x,y+4,e.w,8,col);
+ rect(x+4,y+12,5,5,col);rect(x+e.w-9,y+12,5,5,col);
+ rect(x+5,y+6,4,4,'#fff');rect(x+e.w-9,y+6,4,4,'#fff');
+ rect(x+6,y+7,2,2,'#18213c');rect(x+e.w-8,y+7,2,2,'#18213c');
+ if(e.hp>1)rect(x+7,y-5,10,2,'#f8d66d');
+}
+
+function bossDraw(){
+ if(!boss)return;
+ const b=boss;
+ rect(b.x+18,b.y,60,8,'#9c66ff');
+ rect(b.x+5,b.y+8,86,10,'#c17bff');
+ rect(b.x,b.y+18,96,22,'#8d4bd6');
+ rect(b.x+10,b.y+40,18,14,'#8d4bd6');
+ rect(b.x+68,b.y+40,18,14,'#8d4bd6');
+ rect(b.x+20,b.y+18,14,10,'#fff');
+ rect(b.x+62,b.y+18,14,10,'#fff');
+ rect(b.x+24,b.y+21,6,6,'#18213c');
+ rect(b.x+66,b.y+21,6,6,'#18213c');
+ rect(90,18,300,7,'#28365a');
+ rect(90,18,300*(b.hp/b.max),7,'#ff6b8a');
+ g.fillStyle='#f2d9ff';g.font='12px monospace';g.textAlign='center';
+ g.fillText('BOSS',W/2,13);
+}
+
+function burst(x,y,col,amount=20){
+ for(let i=0;i<amount;i++){
+  const a=Math.random()*Math.PI*2,s=1+Math.random()*5;
+  particles.push({
+   x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+   life:20+Math.random()*25,size:2+Math.random()*3,
+   col:Math.random()<.25?'#fff':col
+  });
+ }
+}
+
+function drop(x,y){
+ if(Math.random()<.20){
+  drops.push({x,y,w:12,h:12,kind:Math.random()<.7?'weapon':'life',vy:1.5});
+ }
+}
+
+function fire(){
+ if(fireTick>0||state!=='playing'||paused)return;
+ const mid=player.x+player.w/2;
+ if(player.weapon===1){
+  shots.push({x:mid-1,y:player.y-8,w:3,h:10,d:1});
+ }else if(player.weapon===2){
+  shots.push({x:mid-8,y:player.y-8,w:3,h:10,d:1},{x:mid+5,y:player.y-8,w:3,h:10,d:1});
+ }else{
+  shots.push(
+   {x:mid-1,y:player.y-8,w:3,h:10,d:2},
+   {x:mid-10,y:player.y,w:3,h:8,d:1},
+   {x:mid+8,y:player.y,w:3,h:8,d:1}
+  );
+ }
+ fireTick=player.weapon===3?8:11;
+}
+
+function damagePlayer(){
+ if(player.inv>0||state!=='playing')return;
+ lives--;player.inv=75;shake=9;
+ burst(player.x+15,player.y+15,'#73fbd3',32);
+ hud();
+ if(lives<=0){
+  burst(player.x+15,player.y+15,'#ff9b54',90);
+  state='over';
+  best=Math.max(best,score);
+  localStorage.setItem('pixelDefenderBest',best);
+  hud();
+ }
+}
+
+function overlap(a,b){
+ return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+}
+
+function enemyShoot(){
+ if(!enemies.length)return;
+ const shooters=Math.min(enemies.length,1+Math.floor(level/3));
+ const bulletCount=1+Math.floor(level/5);
+ const spread=Math.min(.16+level*.003,.42);
+ for(let n=0;n<shooters;n++){
+  const e=enemies[Math.floor(Math.random()*enemies.length)];
+  for(let k=0;k<bulletCount;k++){
+   const lane=k-(bulletCount-1)/2;
+   foeShots.push({
+    x:e.x+e.w/2-2,y:e.y+e.h,w:5,h:11,
+    vx:lane*spread*5,
+    vy:(e.type===1?4.8:4)+level*.10
+   });
+  }
+ }
+}
+
+function update(){
+ if(state!=='playing'||paused){
+  if(state==='over'){
+   particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});
+   particles=particles.filter(p=>p.life>0);
+  }
+  return;
+ }
+ frame++;
+
+ if(keys.ArrowLeft||keys.a||keys.A)player.x-=player.speed;
+ if(keys.ArrowRight||keys.d||keys.D)player.x+=player.speed;
+ if(keys.ArrowUp||keys.w||keys.W)player.y-=player.speed;
+ if(keys.ArrowDown||keys.s||keys.S)player.y+=player.speed;
+
+ player.x=Math.max(4,Math.min(W-player.w-4,player.x));
+ player.y=Math.max(H*.43,Math.min(H-player.h-8,player.y));
+
+ if(keys[' ']||keys.Space||keys.fire)fire();
+ if(fireTick>0)fireTick--;
+ if(player.inv>0)player.inv--;
+
+ shots.forEach(s=>s.y-=8);
+ shots=shots.filter(s=>s.y>-15);
+
+ foeShots.forEach(s=>{s.x+=s.vx||0;s.y+=s.vy||3});
+ foeShots=foeShots.filter(s=>s.y<H+15&&s.x>-20&&s.x<W+20);
+
+ drops.forEach(d=>d.y+=d.vy);
+ drops=drops.filter(d=>d.y<H+10);
+
+ // 적 이동 속도도 레벨과 함께 무한히 상승
+ let edge=false;
+ enemies.forEach(e=>{
+  e.x+=enemyDir*(.9+level*.18+Math.pow(level,1.15)*.035)*(e.type===1?1.35:1);
+  if(e.x<5||e.x+e.w>W-5)edge=true;
+ });
+ if(edge){
+  enemyDir*=-1;
+  enemies.forEach(e=>e.y+=12+Math.min(level*.25,10));
+ }
+
+ // 레벨이 오를수록 발사 간격 단축, 발사하는 적 수와 탄환 수 증가
+ const fireInterval=Math.max(7,48-level*2);
+ if(frame%fireInterval===0)enemyShoot();
+
+ for(let i=enemies.length-1;i>=0;i--){
+  const e=enemies[i];
+  if(overlap(e,player)||e.y+e.h>=player.y){
+   burst(e.x+e.w/2,e.y+e.h/2,'#ff6b8a',24);
+   enemies.splice(i,1);damagePlayer();continue;
+  }
+  for(let j=shots.length-1;j>=0;j--){
+   if(overlap(shots[j],e)){
+    e.hp-=shots[j].d;shots.splice(j,1);
+    if(e.hp<=0){
+     enemies.splice(i,1);score+=e.type===2?20:10;
+     burst(e.x+12,e.y,'#ff6b8a');drop(e.x+8,e.y);hud();
     }
-}
-
-function makeBoss() {
-
-    boss = {
-        x: W / 2 - 48,
-        y: 55,
-        w: 96,
-        h: 54,
-        hp: 28 + level * 7,
-        max: 28 + level * 7,
-        dir: 1,
-        fire: 0
-    };
-}
-
-function hud() {
-
-    $('score').textContent =
-        'SCORE ' + String(score).padStart(4, '0');
-
-    $('best').textContent =
-        'BEST ' + String(best).padStart(4, '0');
-
-    $('lives').textContent =
-        'LIVES ' +
-        '♥'.repeat(lives) +
-        '♡'.repeat(3 - lives);
-
-    $('weapon').textContent =
-        'WEAPON ' + player.weapon;
-}
-
-function rect(x, y, w, h, col) {
-
-    g.fillStyle = col;
-
-    g.fillRect(
-        Math.round(x),
-        Math.round(y),
-        w,
-        h
-    );
-}
-
-function ship(x, y) {
-
-    rect(x + 8, y, 8, 4, '#73fbd3');
-    rect(x + 4, y + 4, 16, 4, '#73fbd3');
-    rect(x, y + 8, 24, 8, '#73fbd3');
-
-    rect(x + 4, y + 16, 5, 4, '#f8d66d');
-    rect(x + 15, y + 16, 5, 4, '#f8d66d');
-
-    rect(x + 9, y + 8, 6, 5, '#173d5a');
-}
-
-function enemyDraw(e) {
-
-    const colors = [
-        '#ff6b8a',
-        '#b58cff',
-        '#ffad5c'
-    ];
-
-    const col = colors[e.type];
-
-    const x = e.x;
-    const y = e.y + Math.sin(frame / 12 + e.phase) * 2;
-
-    rect(x + 4, y, 16, 4, col);
-    rect(x, y + 4, e.w, 8, col);
-
-    rect(x + 4, y + 12, 5, 5, col);
-    rect(x + e.w - 9, y + 12, 5, 5, col);
-
-    rect(x + 5, y + 6, 4, 4, '#fff');
-    rect(x + e.w - 9, y + 6, 4, 4, '#fff');
-
-    rect(x + 6, y + 7, 2, 2, '#18213c');
-    rect(x + e.w - 8, y + 7, 2, 2, '#18213c');
-
-    if (e.hp > 1) {
-        rect(x + 7, y - 5, 10, 2, '#f8d66d');
-    }
-}
-
-function bossDraw() {
-
-    if (!boss) return;
-
-    const b = boss;
-
-    rect(b.x + 18, b.y, 60, 8, '#9c66ff');
-    rect(b.x + 5, b.y + 8, 86, 10, '#c17bff');
-
-    rect(b.x, b.y + 18, 96, 22, '#8d4bd6');
-
-    rect(b.x + 10, b.y + 40, 18, 14, '#8d4bd6');
-    rect(b.x + 68, b.y + 40, 18, 14, '#8d4bd6');
-
-    rect(b.x + 20, b.y + 18, 14, 10, '#fff');
-    rect(b.x + 62, b.y + 18, 14, 10, '#fff');
-
-    rect(b.x + 24, b.y + 21, 6, 6, '#18213c');
-    rect(b.x + 66, b.y + 21, 6, 6, '#18213c');
-
-    rect(90, 18, 300, 7, '#28365a');
-
-    rect(
-        90, 18,
-        300 * (b.hp / b.max),
-        7,
-        '#ff6b8a'
-    );
-
-    g.fillStyle = '#f2d9ff';
-    g.font = '12px monospace';
-    g.textAlign = 'center';
-    g.fillText('BOSS', W / 2, 13);
-}
-
-function burst(x, y, col) {
-
-    for (let i = 0; i < 9; i++) {
-
-        particles.push({
-            x: x,
-            y: y,
-            vx: (Math.random() - 0.5) * 4,
-            vy: (Math.random() - 0.5) * 4,
-            life: 22,
-            col: col
-        });
-    }
-}
-
-function drop(x, y) {
-
-    if (Math.random() < 0.20) {
-
-        drops.push({
-            x: x,
-            y: y,
-            w: 12,
-            h: 12,
-            kind: Math.random() < 0.7
-                ? 'weapon'
-                : 'life',
-            vy: 1.5
-        });
-    }
-}
-
-function fire() {
-
-    if (
-        fireTick > 0 ||
-        state !== 'playing' ||
-        paused
-    ) return;
-
-    const mid = player.x + 11;
-
-    if (player.weapon === 1) {
-
-        shots.push({
-            x: mid,
-            y: player.y - 8,
-            w: 3,
-            h: 10,
-            d: 1
-        });
-
-    } else if (player.weapon === 2) {
-
-        shots.push(
-            {
-                x: mid - 7,
-                y: player.y - 8,
-                w: 3,
-                h: 10,
-                d: 1
-            },
-            {
-                x: mid + 7,
-                y: player.y - 8,
-                w: 3,
-                h: 10,
-                d: 1
-            }
-        );
-
-    } else {
-
-        shots.push(
-            {
-                x: mid,
-                y: player.y - 8,
-                w: 3,
-                h: 10,
-                d: 2
-            },
-            {
-                x: mid - 9,
-                y: player.y,
-                w: 3,
-                h: 8,
-                d: 1
-            },
-            {
-                x: mid + 9,
-                y: player.y,
-                w: 3,
-                h: 8,
-                d: 1
-            }
-        );
-    }
-
-    fireTick = player.weapon === 3 ? 9 : 12;
-}
-
-function damagePlayer() {
-
-    if (player.inv > 0) return;
-
-    lives--;
-
-    player.inv = 80;
-
-    burst(
-        player.x + 12,
-        player.y,
-        '#73fbd3'
-    );
-
-    hud();
-
-    if (lives <= 0) {
-
-        state = 'over';
-
-        best = Math.max(best, score);
-
-        localStorage.setItem(
-            'pixelDefenderBest',
-            best
-        );
-
-        hud();
-    }
-}
-
-function overlap(a, b) {
-
-    return (
-        a.x < b.x + b.w &&
-        a.x + a.w > b.x &&
-        a.y < b.y + b.h &&
-        a.y + a.h > b.y
-    );
-}
-
-function update() {
-
-    if (state !== 'playing' || paused) return;
-
-    frame++;
-
-    if (keys.ArrowLeft || keys.a || keys.A) {
-        player.x -= player.speed;
-    }
-
-    if (keys.ArrowRight || keys.d || keys.D) {
-        player.x += player.speed;
-    }
-
-    player.x = Math.max(
-        4,
-        Math.min(W - player.w - 4, player.x)
-    );
-
-    if (keys[' '] || keys.Space || keys.fire) {
-        fire();
-    }
-
-    if (fireTick > 0) fireTick--;
-
-    if (player.inv > 0) player.inv--;
-
-    shots.forEach(s => s.y -= 8);
-    shots = shots.filter(s => s.y > -15);
-
-    foeShots.forEach(s => s.y += s.vy || 3);
-    foeShots = foeShots.filter(s => s.y < H + 15);
-
-    drops.forEach(d => d.y += d.vy);
-    drops = drops.filter(d => d.y < H + 10);
-
-    let edge = false;
-
-    enemies.forEach(e => {
-
-        e.x += enemyDir *
-            (0.9 + level * 0.18) *
-            (e.type === 1 ? 1.35 : 1);
-
-        if (e.x < 5 || e.x + e.w > W - 5) {
-            edge = true;
-        }
+    break;
+   }
+  }
+ }
+
+ if(boss){
+  boss.x+=boss.dir*(2+level*.12);
+  if(boss.x<5||boss.x+boss.w>W-5)boss.dir*=-1;
+  boss.fire++;
+  if(boss.fire>Math.max(8,30-level*1.2)){
+   boss.fire=0;
+   const count=3+Math.floor(level/3);
+   for(let k=0;k<count;k++){
+    const lane=k-(count-1)/2;
+    foeShots.push({
+     x:boss.x+boss.w/2-3,y:boss.y+boss.h-4,w:6,h:13,
+     vx:lane*Math.min(.45+level*.018,2.2),
+     vy:4.5+level*.12
     });
-
-    if (edge) {
-
-        enemyDir *= -1;
-
-        enemies.forEach(e => e.y += 12);
+   }
+  }
+  for(let j=shots.length-1;j>=0;j--){
+   if(overlap(shots[j],boss)){
+    boss.hp-=shots[j].d;shots.splice(j,1);
+    if(boss.hp<=0){
+     score+=150;burst(boss.x+48,boss.y+25,'#c17bff',70);
+     drop(boss.x+42,boss.y+40);boss=null;level++;wave();hud();
     }
+    break;
+   }
+  }
+  if(boss&&overlap(boss,player))damagePlayer();
+ }
 
-    if (
-        frame % Math.max(18, 70 - level * 5) === 0 &&
-        enemies.length
-    ) {
+ foeShots.forEach(s=>{
+  if(overlap(s,player)){
+   s.y=H+20;damagePlayer();
+  }
+ });
 
-        const e = enemies[
-            Math.floor(Math.random() * enemies.length)
-        ];
+ for(let i=drops.length-1;i>=0;i--){
+  if(overlap(drops[i],player)){
+   const d=drops[i];
+   if(d.kind==='weapon')player.weapon=Math.min(3,player.weapon+1);
+   else lives=Math.min(5,lives+1);
+   burst(d.x,d.y,d.kind==='weapon'?'#f8d66d':'#73fbd3');
+   drops.splice(i,1);hud();
+  }
+ }
 
-        foeShots.push({
-            x: e.x + e.w / 2,
-            y: e.y + e.h,
-            w: 4,
-            h: 9,
-            vy: (e.type === 1 ? 4.8 : 4) + level * 0.12
-        });
-    }
+ if(enemies.length===0&&!boss){
+  if(level%3===0)makeBoss();
+  else{level++;wave();hud();}
+ }
 
-    for (let i = enemies.length - 1; i >= 0; i--) {
-
-        const e = enemies[i];
-
-        if (e.y + e.h >= player.y) {
-
-            enemies.splice(i, 1);
-            damagePlayer();
-            continue;
-        }
-
-        for (let j = shots.length - 1; j >= 0; j--) {
-
-            if (overlap(shots[j], e)) {
-
-                e.hp -= shots[j].d;
-
-                shots.splice(j, 1);
-
-                if (e.hp <= 0) {
-
-                    enemies.splice(i, 1);
-
-                    score += e.type === 2 ? 20 : 10;
-
-                    burst(
-                        e.x + 12,
-                        e.y,
-                        '#ff6b8a'
-                    );
-
-                    drop(e.x + 8, e.y);
-
-                    hud();
-                }
-
-                break;
-            }
-        }
-    }
-
-    if (boss) {
-
-        boss.x += boss.dir * (2.0 + level * 0.12);
-
-        if (
-            boss.x < 5 ||
-            boss.x + boss.w > W - 5
-        ) {
-            boss.dir *= -1;
-        }
-
-        boss.fire++;
-
-        if (boss.fire > Math.max(20, 42 - level * 2)) {
-
-            boss.fire = 0;
-
-            foeShots.push(
-                {
-                    x: boss.x + 20,
-                    y: boss.y + 48,
-                    w: 6,
-                    h: 12,
-                    vy: 4.4 + level * 0.12
-                },
-                {
-                    x: boss.x + 70,
-                    y: boss.y + 48,
-                    w: 6,
-                    h: 12,
-                    vy: 4.4 + level * 0.12
-                }
-            );
-        }
-
-        for (let j = shots.length - 1; j >= 0; j--) {
-
-            if (overlap(shots[j], boss)) {
-
-                boss.hp -= shots[j].d;
-
-                shots.splice(j, 1);
-
-                if (boss.hp <= 0) {
-
-                    score += 150;
-
-                    burst(
-                        boss.x + 48,
-                        boss.y + 25,
-                        '#c17bff'
-                    );
-
-                    drop(
-                        boss.x + 42,
-                        boss.y + 40
-                    );
-
-                    boss = null;
-
-                    level++;
-
-                    wave();
-
-                    hud();
-                }
-
-                break;
-            }
-        }
-
-        if (boss && boss.y + boss.h >= player.y) {
-            damagePlayer();
-        }
-    }
-
-    foeShots.forEach(s => {
-
-        if (overlap(s, player)) {
-
-            s.y = H + 20;
-
-            damagePlayer();
-        }
-    });
-
-    for (let i = drops.length - 1; i >= 0; i--) {
-
-        if (overlap(drops[i], player)) {
-
-            const d = drops[i];
-
-            if (d.kind === 'weapon') {
-
-                player.weapon = Math.min(
-                    3,
-                    player.weapon + 1
-                );
-
-            } else {
-
-                lives = Math.min(5, lives + 1);
-            }
-
-            burst(
-                d.x,
-                d.y,
-                d.kind === 'weapon'
-                    ? '#f8d66d'
-                    : '#73fbd3'
-            );
-
-            drops.splice(i, 1);
-
-            hud();
-        }
-    }
-
-    if (enemies.length === 0 && !boss) {
-
-        if (level % 3 === 0) {
-
-            makeBoss();
-
-        } else {
-
-            level++;
-
-            wave();
-
-            hud();
-        }
-    }
-
-    particles.forEach(p => {
-
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life--;
-    });
-
-    particles = particles.filter(p => p.life > 0);
+ particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});
+ particles=particles.filter(p=>p.life>0);
 }
 
-function overlay(title, line1, line2) {
-
-    rect(0, 0, W, H, '#070b18dd');
-
-    g.textAlign = 'center';
-
-    g.fillStyle = '#73fbd3';
-    g.font = 'bold 24px monospace';
-
-    g.fillText(
-        title,
-        W / 2,
-        H / 2 - 36
-    );
-
-    g.fillStyle = '#e8f1ff';
-    g.font = '14px monospace';
-
-    g.fillText(
-        line1,
-        W / 2,
-        H / 2 + 2
-    );
-
-    g.fillText(
-        line2,
-        W / 2,
-        H / 2 + 28
-    );
+function overlay(title,line1,line2){
+ rect(0,0,W,H,'#070b18dd');
+ g.textAlign='center';g.fillStyle='#73fbd3';g.font='bold 24px monospace';
+ g.fillText(title,W/2,H/2-36);
+ g.fillStyle='#e8f1ff';g.font='14px monospace';
+ g.fillText(line1,W/2,H/2+2);
+ g.fillText(line2,W/2,H/2+28);
 }
 
-function draw() {
+function draw(){
+ g.save();
+ if(shake>0){
+  g.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  shake--;
+ }
+ g.clearRect(-10,-10,W+20,H+20);
 
-    g.clearRect(0, 0, W, H);
+ for(let i=0;i<65;i++){
+  const x=(i*97)%W,y=(i*139+frame*.45)%H;
+  rect(x,y,2,2,'#24385e');
+ }
+ for(let y=H-110;y<H;y+=18)rect(0,y,W,1,'#111d39');
 
-    for (let i = 0; i < 55; i++) {
+ shots.forEach(s=>{
+  rect(s.x,s.y,s.w,s.h,'#f8d66d');
+  rect(s.x+1,s.y+2,1,4,'#fff');
+ });
+ foeShots.forEach(s=>{
+  rect(s.x,s.y,s.w,s.h,'#ff795e');
+  rect(s.x+1,s.y+2,Math.max(2,s.w-2),4,'#ffd0a8');
+ });
+ enemies.forEach(enemyDraw);
+ bossDraw();
 
-        let x = (i * 97) % W;
-        let y = (i * 139 + frame * 0.35) % H;
+ drops.forEach(d=>{
+  rect(d.x,d.y,12,12,d.kind==='weapon'?'#f8d66d':'#73fbd3');
+  g.fillStyle='#101a32';g.font='10px monospace';g.textAlign='center';
+  g.fillText(d.kind==='weapon'?'W':'+',d.x+6,d.y+10);
+ });
 
-        rect(x, y, 2, 2, '#24385e');
-    }
+ particles.forEach(p=>rect(p.x,p.y,p.size,p.size,p.col));
 
-    for (let y = H - 110; y < H; y += 18) {
-        rect(0, y, W, 1, '#111d39');
-    }
+ if(state==='title')overlay('PIXEL DEFENDER','START 또는 ENTER로 시작','탄막을 피하고 보스를 격파하라!');
+ if(state==='over')overlay('GAME OVER','SCORE '+score+'  BEST '+best,'R 또는 RESTART로 다시 도전');
+ if(paused&&state==='playing')overlay('PAUSED','P 버튼으로 계속','');
 
-    shots.forEach(s => {
-
-        rect(s.x, s.y, s.w, s.h, '#f8d66d');
-        rect(s.x + 1, s.y + 2, 1, 4, '#fff');
-    });
-
-    foeShots.forEach(s => {
-        rect(s.x, s.y, s.w, s.h, '#ff795e');
-    });
-
-    enemies.forEach(enemyDraw);
-
-    bossDraw();
-
-    drops.forEach(d => {
-
-        rect(
-            d.x,
-            d.y,
-            12,
-            12,
-            d.kind === 'weapon'
-                ? '#f8d66d'
-                : '#73fbd3'
-        );
-
-        g.fillStyle = '#101a32';
-        g.font = '10px monospace';
-        g.textAlign = 'center';
-
-        g.fillText(
-            d.kind === 'weapon' ? 'W' : '+',
-            d.x + 6,
-            d.y + 10
-        );
-    });
-
-    particles.forEach(p => {
-        rect(p.x, p.y, 3, 3, p.col);
-    });
-
-    if (state === 'title') {
-
-        overlay(
-            'PIXEL DEFENDER',
-            'START 버튼 또는 ENTER를 눌러 시작',
-            '적 처치 · 아이템 획득 · 보스 격파'
-        );
-    }
-
-    if (state === 'over') {
-
-        overlay(
-            'GAME OVER',
-            'SCORE ' + score + '   BEST ' + best,
-            'R 또는 RESTART로 다시 도전'
-        );
-    }
-
-    if (paused && state === 'playing') {
-
-        overlay(
-            'PAUSED',
-            'P 또는 Ⅱ 버튼으로 계속',
-            ''
-        );
-    }
-
-    // 오버레이보다 플레이어를 나중에 그려 시작 화면에서도 보이게 함
-    if (
-        player &&
-        (
-            player.inv === 0 ||
-            Math.floor(frame / 5) % 2 === 0
-        )
-    ) {
-        ship(player.x, player.y);
-    }
+ // 플레이어는 항상 오버레이보다 위에 그려서 잘 보이게 함
+ if(player&&(player.inv===0||Math.floor(frame/5)%2===0)){
+  ship(player.x,player.y);
+  g.strokeStyle='#b8fff4';g.lineWidth=2;
+  g.strokeRect(player.x-2,player.y-2,player.w+4,player.h+5);
+  g.shadowColor='#73fbd3';g.shadowBlur=12;
+  g.strokeRect(player.x-1,player.y-1,player.w+2,player.h+2);
+  g.shadowBlur=0;
+ }
+ g.restore();
 }
 
-function loop() {
+function loop(){update();draw();requestAnimationFrame(loop)}
 
-    update();
-    draw();
-
-    requestAnimationFrame(loop);
+function bind(id,key){
+ const el=$(id);
+ const down=e=>{e.preventDefault();keys[key]=true};
+ const up=e=>{e.preventDefault();keys[key]=false};
+ el.addEventListener('pointerdown',down);
+ el.addEventListener('pointerup',up);
+ el.addEventListener('pointerleave',up);
+ el.addEventListener('pointercancel',up);
 }
 
-function bind(id, key) {
+bind('left','ArrowLeft');bind('right','ArrowRight');
+bind('up','ArrowUp');bind('down','ArrowDown');bind('fire','fire');
 
-    const el = $(id);
+$('start').onclick=reset;
+$('restart').onclick=reset;
+$('pause').onclick=()=>{if(state==='playing')paused=!paused};
 
-    const down = e => {
-        e.preventDefault();
-        keys[key] = true;
-    };
+c.addEventListener('pointerdown',()=>c.focus());
 
-    const up = e => {
-        e.preventDefault();
-        keys[key] = false;
-    };
-
-    el.addEventListener('pointerdown', down);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointerleave', up);
-    el.addEventListener('pointercancel', up);
-}
-
-bind('left', 'ArrowLeft');
-bind('right', 'ArrowRight');
-bind('fire', 'fire');
-
-$('pause').onclick = () => {
-
-    if (state === 'playing') {
-        paused = !paused;
-    }
-};
-
-$('restart').onclick = reset;
-$('start').onclick = reset;
-
-// 게임 화면을 클릭하면 키보드 조작을 받을 수 있도록 포커스
-c.setAttribute('tabindex', '0');
-c.addEventListener('pointerdown', () => c.focus());
-
-window.addEventListener('keydown', e => {
-
-    if (
-        ['ArrowLeft', 'ArrowRight', ' ', 'Space'].includes(e.key)
-    ) {
-        e.preventDefault();
-    }
-
-    keys[e.key] = true;
-
-    if (e.key === 'Enter' && state !== 'playing') {
-        reset();
-    }
-
-    if (
-        (e.key === 'p' || e.key === 'P') &&
-        state === 'playing'
-    ) {
-        paused = !paused;
-    }
-
-    if (e.key === 'r' || e.key === 'R') {
-        reset();
-    }
+window.addEventListener('keydown',e=>{
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'].includes(e.key))e.preventDefault();
+ keys[e.key]=true;
+ if(e.key==='Enter'&&state!=='playing')reset();
+ if((e.key==='p'||e.key==='P')&&state==='playing')paused=!paused;
+ if(e.key==='r'||e.key==='R')reset();
 });
+window.addEventListener('keyup',e=>{keys[e.key]=false});
 
-window.addEventListener('keyup', e => {
-    keys[e.key] = false;
-});
-
-player = {
-    x: W / 2 - 12,
-    y: H - 55,
-    w: 24,
-    h: 20,
-    speed: 4,
-    inv: 0,
-    weapon: 1
-};
-
-shots = [];
-foeShots = [];
-enemies = [];
-drops = [];
-particles = [];
-boss = null;
-
-hud();
-loop();
-
+player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
+shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
+hud();loop();
 })();
 </script>
-
 </body>
 </html>
 """
 
-components.html(
-    game_html,
-    height=690,
-    scrolling=False
-)
+components.html(game_html,height=740,scrolling=False)
 
 with st.expander("📦 게임 기능 안내"):
-
     st.markdown("""
     - 보스 몬스터: 3레벨마다 등장
     - 무기 업그레이드: 최대 3단계
     - 아이템 드롭: 무기 및 회복
     - 적 종류: 기본형, 빠른 적, 내구력 높은 적
-    - 난이도: 레벨에 따라 적 수·이동 속도·탄환 속도·보스 체력 증가
-    - 게임 시작 및 종료 화면
+    - 적과 직접 충돌 시 피격
+    - 플레이어 폭발 파티클 효과
+    - 적의 탄환 수와 공격 빈도 증가
+    - 레벨에 따라 적의 속도와 보스 체력 증가
     - 최고 점수: 브라우저 localStorage 저장
     """)
 
-st.caption(
-    "PIXEL DEFENDER v3 · Streamlit + HTML Canvas"
-)
+st.caption("PIXEL DEFENDER v4 · Streamlit + HTML Canvas")
