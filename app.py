@@ -42,6 +42,7 @@ game_html = r"""
 body{margin:0;background:#090d1b;color:#e8f1ff;font-family:monospace}
 .wrap{width:100%;display:flex;flex-direction:column;align-items:center;gap:9px}
 .hud{width:min(720px,100%);display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;color:#73fbd3;font-weight:bold;font-size:13px}
+.life-panel{width:min(720px,100%);background:#172444;border:2px solid #ff6b8a;border-radius:9px;padding:10px;text-align:center;color:#fff;font-size:20px;font-weight:bold;letter-spacing:2px;text-shadow:0 0 8px #ff6b8a}
 canvas{width:min(720px,100%);height:auto;image-rendering:pixelated;border:3px solid #5474ad;background:#070b18;outline:none}
 .controls{display:flex;gap:8px;width:min(720px,100%);justify-content:center;flex-wrap:wrap}
 button{background:#172444;color:#e8f1ff;border:2px solid #5474ad;padding:11px 16px;border-radius:8px;font-weight:bold;font-size:15px;touch-action:none}
@@ -57,6 +58,10 @@ button:active{background:#28518a}
 <span id="level">LEVEL 1</span>
 <span id="lives">LIVES ♥♥♥</span>
 <span id="weapon">WEAPON 1</span>
+</div>
+
+<div class="life-panel" id="lifeDisplay">
+ ❤️ ❤️ ❤️  LIVES: 3
 </div>
 
 <canvas id="game" width="480" height="560" tabindex="0"></canvas>
@@ -116,11 +121,24 @@ function makeBoss(){
 }
 
 function hud(){
- $('score').textContent='SCORE '+String(score).padStart(4,'0');
- $('best').textContent='BEST '+String(best).padStart(4,'0');
- $('level').textContent='LEVEL '+level;
- $('lives').textContent='LIVES '+'♥'.repeat(Math.max(0,lives))+'♡'.repeat(Math.max(0,3-lives));
- $('weapon').textContent='WEAPON '+player.weapon;
+ $('score').textContent =
+  'SCORE '+String(score).padStart(4,'0');
+
+ $('best').textContent =
+  'BEST '+String(best).padStart(4,'0');
+
+ $('level').textContent =
+  'LEVEL '+level;
+
+ $('lives').textContent =
+  'LIVES '+'♥'.repeat(Math.max(0,lives));
+
+ $('weapon').textContent =
+  'WEAPON '+player.weapon;
+
+ $('lifeDisplay').textContent =
+  '❤️ '.repeat(Math.max(0,lives)) +
+  '  LIVES: '+lives;
 }
 
 function rect(x,y,w,h,col){
