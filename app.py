@@ -79,7 +79,7 @@ const $=id=>document.getElementById(id);
 
 const MAX_LIVES=5;
 const ULT_COOLDOWN=900;
-const TRANSITION_TIME=150;
+const TRANSITION_TIME=90;
 
 let keys={},score=0;
 let best=Number(localStorage.getItem('pixelDefenderBest')||0);
@@ -106,7 +106,7 @@ function wave(){
   const type=(i+level)%3;
   enemies.push({
    x:20+(i%6)*74,
-   y:48+Math.floor(i/6)*43,
+   y:30+Math.floor(i/6)*32,
    w:type===1?28:24,h:20,type,
    hp:type===2?2+Math.floor(level/4):1+Math.floor(level/18),
    phase:Math.random()*6.28
@@ -244,10 +244,8 @@ function useUltimate(){
  ultEffect=55;
  shake=13;
 
- // 적 탄환 제거
  foeShots=[];
 
- // 화면의 일반 적 제거
  for(let i=enemies.length-1;i>=0;i--){
   const e=enemies[i];
   burst(e.x+e.w/2,e.y+e.h/2,'#73fbd3',35);
@@ -255,7 +253,6 @@ function useUltimate(){
   enemies.splice(i,1);
  }
 
- // 보스에게 큰 피해
  if(boss){
   burst(boss.x+boss.w/2,boss.y+boss.h/2,'#c17bff',55);
   boss.hp-=Math.max(50,Math.floor(boss.max*.30));
@@ -270,7 +267,6 @@ function useUltimate(){
 
  hud();
 
- // 일반 적을 모두 없앴다면 다음 레벨로 이동
  if(enemies.length===0&&!boss&&transitionTimer===0){
   nextLevel();
  }
@@ -333,7 +329,6 @@ function update(){
  }
  if(ultEffect>0)ultEffect--;
 
- // 레벨 전환 중에는 플레이어만 움직이고 적은 아직 생성되지 않음
  if(transitionTimer>0){
   transitionTimer--;
   particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});
@@ -367,6 +362,7 @@ function update(){
  drops.forEach(d=>d.y+=d.vy);
  drops=drops.filter(d=>d.y<H+10);
 
+ // 적들은 좌우로만 이동하고, 가장자리에 닿아도 아래로 내려오지 않음
  let edge=false;
  enemies.forEach(e=>{
   e.x+=enemyDir*(.9+level*.18+Math.pow(level,1.15)*.035)*(e.type===1?1.35:1);
@@ -375,7 +371,6 @@ function update(){
 
  if(edge){
   enemyDir*=-1;
-  enemies.forEach(e=>e.y+=12+Math.min(level*.25,10));
  }
 
  const fireInterval=Math.max(7,48-level*2);
@@ -559,7 +554,6 @@ function draw(){
 
  particles.forEach(p=>rect(p.x,p.y,p.size,p.size,p.col));
 
- // 궁극기 에너지 파동 애니메이션
  drawUltimate();
 
  if(state==='title'){
@@ -574,7 +568,6 @@ function draw(){
   overlay('PAUSED','P 버튼으로 계속','');
  }
 
- // 레벨 전환 화면
  if(transitionTimer>0&&state==='playing'){
   rect(0,0,W,H,'#070b18bb');
 
@@ -674,7 +667,7 @@ with st.expander("📦 게임 기능 안내"):
     - 무기: 최대 5단계
     - Q 궁극기: 에너지 파동 애니메이션, 일반 적과 탄환 제거, 보스 피해
     - 궁극기 재사용 대기시간: 15초
-    - 레벨 전환: 중앙 레벨 표시 후 2.5초 뒤 적 생성
+    - 레벨 전환: 중앙 레벨 표시 후 1.5초 뒤 적 생성
     - 체력: 기본 3개, 회복으로 최대 5개
     - 아이템: 무기 업그레이드 및 회복
     - 적 종류: 기본형, 빠른 적, 내구력 높은 적
