@@ -2,35 +2,26 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(
-    page_title="PIXEL DEFENDER",
-    page_icon="👾",
-    layout="wide"
-)
+st.set_page_config(page_title="PIXEL DEFENDER", page_icon="👾", layout="wide")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-.stApp { background:#090d1b; color:#e8f1ff; }
-h1 { font-family:'Press Start 2P',monospace!important; color:#73fbd3; }
-.block-container { max-width:1000px; padding-top:2rem; }
+.stApp{background:#090d1b;color:#e8f1ff}
+h1{color:#73fbd3}
+.block-container{max-width:1000px;padding-top:2rem}
 </style>
-""", unsafe_allow_html=True)
+""",unsafe_allow_html=True)
 
 st.title("PIXEL DEFENDER")
-st.caption("INFINITE BOSS UPDATE · 픽셀 우주 슈팅")
+st.caption("INFINITE BOSS UPDATE · VERSION 6")
 
 st.markdown("""
 **조작법**
-
-- W / A / S / D 또는 방향키: 이동
+- WASD / 방향키: 이동
 - SPACE: 발사
-- Q: 궁극기 (15초 재사용 대기시간)
+- Q: 궁극기 (15초 대기시간)
 - P: 일시정지
 - R: 다시 시작
-
-적과 부딪히거나 적의 탄환에 맞으면 목숨을 잃습니다.
-레벨이 올라갈수록 적의 공격이 계속 강해집니다!
 """)
 
 game_html = r"""
@@ -43,7 +34,8 @@ game_html = r"""
 body{margin:0;background:#090d1b;color:#e8f1ff;font-family:monospace}
 .wrap{width:100%;display:flex;flex-direction:column;align-items:center;gap:9px}
 .hud{width:min(720px,100%);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;color:#73fbd3;font-weight:bold;font-size:13px}
-.life-display{display:inline-block;background:#172444;color:#ff6b8a;border:2px solid #ff6b8a;border-radius:8px;padding:8px 12px;font-size:17px;font-weight:bold;text-shadow:0 0 8px #ff6b8a;white-space:nowrap}
+.life-display{background:#172444;color:#ff6b8a;border:2px solid #ff6b8a;border-radius:8px;padding:8px 12px;font-size:16px;font-weight:bold}
+.ult-display{background:#30204d;color:#d9a5ff;border:2px solid #bd75ff;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:bold}
 canvas{width:min(720px,100%);height:auto;image-rendering:pixelated;border:3px solid #5474ad;background:#070b18;outline:none}
 .controls{display:flex;gap:8px;width:min(720px,100%);justify-content:center;flex-wrap:wrap}
 button{background:#172444;color:#e8f1ff;border:2px solid #5474ad;padding:11px 16px;border-radius:8px;font-weight:bold;font-size:15px;touch-action:none}
@@ -58,8 +50,8 @@ button:active{background:#28518a}
 <span id="best">BEST 0000</span>
 <span id="level">LEVEL 1</span>
 <span id="lives" class="life-display">❤️ ❤️ ❤️ LIVES: 3</span>
-<span id="weapon">WEAPON 1</span>
-<span id="ult">ULT: READY (Q)</span>
+<span id="weapon">WEAPON 1/5</span>
+<span id="ult" class="ult-display">ULT READY (Q)</span>
 </div>
 
 <canvas id="game" width="480" height="560" tabindex="0"></canvas>
@@ -85,18 +77,25 @@ const W=480,H=560;
 g.imageSmoothingEnabled=false;
 const $=id=>document.getElementById(id);
 
-let keys={},score=0,best=Number(localStorage.getItem('pixelDefenderBest')||0);
-let lives=3,level=1,state='title',paused=false,frame=0;
-let player,shots,foeShots,enemies,drops,particles,boss;
-let fireTick=0,enemyDir=1,shake=0;
-let ultCooldown=0;
+const MAX_LIVES=5;
 const ULT_COOLDOWN=900;
+const TRANSITION_TIME=150;
+
+let keys={},score=0;
+let best=Number(localStorage.getItem('pixelDefenderBest')||0);
+let lives=3,level=1,state='title',paused=false,frame=0;
+let player,shots=[],foeShots=[],enemies=[],drops=[],particles=[];
+let boss=null,fireTick=0,enemyDir=1,shake=0;
+let ultCooldown=0,ultEffect=0,transitionTimer=0;
+let transitionText='';
 
 function reset(){
- score=0;lives=3;level=1;frame=0;paused=false;state='playing';
+ score=0;lives=3;level=1;frame=0;
+ paused=false;state='playing';
  player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
- shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
- fireTick=0;enemyDir=1;shake=0;ultCooldown=0;
+ shots=[];foeShots=[];enemies=[];drops=[];particles=[];
+ boss=null;fireTick=0;enemyDir=1;shake=0;
+ ultCooldown=0;ultEffect=0;transitionTimer=0;
  wave();hud();c.focus();
 }
 
@@ -120,21 +119,37 @@ function makeBoss(){
  boss={x:W/2-48,y:48,w:96,h:54,hp,max:hp,dir:1,fire:0};
 }
 
+function nextLevel(){
+ level++;
+ enemies=[];
+ boss=null;
+ shots=[];
+ foeShots=[];
+ transitionTimer=TRANSITION_TIME;
+ transitionText='LEVEL '+level;
+ hud();
+}
+
+function startLevel(){
+ if(level%3===0)makeBoss();
+ else wave();
+}
+
 function hud(){
  $('score').textContent='SCORE '+String(score).padStart(4,'0');
  $('best').textContent='BEST '+String(best).padStart(4,'0');
  $('level').textContent='LEVEL '+level;
  $('lives').textContent='❤️ '.repeat(Math.max(0,lives))+' LIVES: '+lives;
  $('weapon').textContent='WEAPON '+player.weapon+'/5';
- $('ult').textContent=ultCooldown<=0?'ULT: READY (Q)':'ULT: '+Math.ceil(ultCooldown/60)+'s';
+ $('ult').textContent=ultCooldown<=0?'ULT READY (Q)':'ULT '+Math.ceil(ultCooldown/60)+'s';
 }
 
 function rect(x,y,w,h,col){
- g.fillStyle=col;g.fillRect(Math.round(x),Math.round(y),w,h);
+ g.fillStyle=col;
+ g.fillRect(Math.round(x),Math.round(y),w,h);
 }
 
 function ship(x,y){
- // 밝은 외곽과 넓은 실루엣으로 우주선을 선명하게 표현
  rect(x+13,y,4,5,'#ffffff');
  rect(x+10,y+5,10,5,'#9ffff0');
  rect(x+6,y+10,18,7,'#48e6d0');
@@ -152,11 +167,16 @@ function ship(x,y){
 
 function enemyDraw(e){
  const colors=['#ff6b8a','#b58cff','#ffad5c'];
- const col=colors[e.type],x=e.x,y=e.y+Math.sin(frame/12+e.phase)*2;
- rect(x+4,y,16,4,col);rect(x,y+4,e.w,8,col);
- rect(x+4,y+12,5,5,col);rect(x+e.w-9,y+12,5,5,col);
- rect(x+5,y+6,4,4,'#fff');rect(x+e.w-9,y+6,4,4,'#fff');
- rect(x+6,y+7,2,2,'#18213c');rect(x+e.w-8,y+7,2,2,'#18213c');
+ const col=colors[e.type];
+ const x=e.x,y=e.y+Math.sin(frame/12+e.phase)*2;
+ rect(x+4,y,16,4,col);
+ rect(x,y+4,e.w,8,col);
+ rect(x+4,y+12,5,5,col);
+ rect(x+e.w-9,y+12,5,5,col);
+ rect(x+5,y+6,4,4,'#fff');
+ rect(x+e.w-9,y+6,4,4,'#fff');
+ rect(x+6,y+7,2,2,'#18213c');
+ rect(x+e.w-8,y+7,2,2,'#18213c');
  if(e.hp>1)rect(x+7,y-5,10,2,'#f8d66d');
 }
 
@@ -174,7 +194,9 @@ function bossDraw(){
  rect(b.x+66,b.y+21,6,6,'#18213c');
  rect(90,18,300,7,'#28365a');
  rect(90,18,300*(b.hp/b.max),7,'#ff6b8a');
- g.fillStyle='#f2d9ff';g.font='12px monospace';g.textAlign='center';
+ g.fillStyle='#f2d9ff';
+ g.font='12px monospace';
+ g.textAlign='center';
  g.fillText('BOSS',W/2,13);
 }
 
@@ -183,7 +205,8 @@ function burst(x,y,col,amount=20){
   const a=Math.random()*Math.PI*2,s=1+Math.random()*5;
   particles.push({
    x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
-   life:20+Math.random()*25,size:2+Math.random()*3,
+   life:20+Math.random()*25,
+   size:2+Math.random()*3,
    col:Math.random()<.25?'#fff':col
   });
  }
@@ -196,10 +219,9 @@ function drop(x,y){
 }
 
 function fire(){
- if(fireTick>0||state!=='playing'||paused)return;
+ if(fireTick>0||state!=='playing'||paused||transitionTimer>0)return;
  const mid=player.x+player.w/2;
 
- // 무기 레벨에 따라 발사 탄환 수와 공격력이 증가합니다.
  const patterns={
   1:[{x:0,d:1}],
   2:[{x:-7,d:1},{x:7,d:1}],
@@ -212,45 +234,53 @@ function fire(){
   shots.push({x:mid+s.x-1,y:player.y-8,w:3,h:10,d:s.d});
  });
 
- fireTick=player.weapon>=4?7:(player.weapon===3?8:11);
+ fireTick=player.weapon>=4?7:11;
 }
 
 function useUltimate(){
- if(state!=='playing'||paused||ultCooldown>0)return;
+ if(state!=='playing'||paused||ultCooldown>0||transitionTimer>0)return;
 
  ultCooldown=ULT_COOLDOWN;
+ ultEffect=55;
+ shake=13;
 
- // 화면의 적 탄환을 제거하고 일반 적을 모두 처치합니다.
+ // 적 탄환 제거
  foeShots=[];
 
+ // 화면의 일반 적 제거
  for(let i=enemies.length-1;i>=0;i--){
   const e=enemies[i];
-  burst(e.x+e.w/2,e.y+e.h/2,'#73fbd3',28);
+  burst(e.x+e.w/2,e.y+e.h/2,'#73fbd3',35);
   score+=e.type===2?20:10;
   enemies.splice(i,1);
  }
 
- // 보스에게도 강력한 피해를 줍니다.
+ // 보스에게 큰 피해
  if(boss){
-  burst(boss.x+boss.w/2,boss.y+boss.h/2,'#c17bff',45);
+  burst(boss.x+boss.w/2,boss.y+boss.h/2,'#c17bff',55);
   boss.hp-=Math.max(50,Math.floor(boss.max*.30));
 
   if(boss.hp<=0){
    score+=150;
-   burst(boss.x+48,boss.y+25,'#c17bff',70);
+   burst(boss.x+48,boss.y+25,'#c17bff',80);
    drop(boss.x+42,boss.y+40);
-   boss=null;
-   level++;
-   wave();
+   nextLevel();
   }
  }
 
  hud();
+
+ // 일반 적을 모두 없앴다면 다음 레벨로 이동
+ if(enemies.length===0&&!boss&&transitionTimer===0){
+  nextLevel();
+ }
 }
 
 function damagePlayer(){
- if(player.inv>0||state!=='playing')return;
- lives--;player.inv=75;shake=9;
+ if(player.inv>0||state!=='playing'||transitionTimer>0)return;
+ lives--;
+ player.inv=75;
+ shake=9;
  burst(player.x+15,player.y+15,'#73fbd3',32);
  hud();
 
@@ -275,7 +305,6 @@ function enemyShoot(){
 
  for(let n=0;n<shooters;n++){
   const e=enemies[Math.floor(Math.random()*enemies.length)];
-
   for(let k=0;k<bulletCount;k++){
    const lane=k-(bulletCount-1)/2;
    foeShots.push({
@@ -298,10 +327,23 @@ function update(){
 
  frame++;
 
- // 궁극기 재사용 대기시간
  if(ultCooldown>0){
   ultCooldown--;
   if(ultCooldown%60===0)hud();
+ }
+ if(ultEffect>0)ultEffect--;
+
+ // 레벨 전환 중에는 플레이어만 움직이고 적은 아직 생성되지 않음
+ if(transitionTimer>0){
+  transitionTimer--;
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});
+  particles=particles.filter(p=>p.life>0);
+
+  if(transitionTimer===0){
+   startLevel();
+   hud();
+  }
+  return;
  }
 
  if(keys.ArrowLeft||keys.a||keys.A)player.x-=player.speed;
@@ -325,9 +367,7 @@ function update(){
  drops.forEach(d=>d.y+=d.vy);
  drops=drops.filter(d=>d.y<H+10);
 
- // 적 이동 속도도 레벨과 함께 무한히 상승
  let edge=false;
-
  enemies.forEach(e=>{
   e.x+=enemyDir*(.9+level*.18+Math.pow(level,1.15)*.035)*(e.type===1?1.35:1);
   if(e.x<5||e.x+e.w>W-5)edge=true;
@@ -338,7 +378,6 @@ function update(){
   enemies.forEach(e=>e.y+=12+Math.min(level*.25,10));
  }
 
- // 레벨이 오를수록 적의 공격 빈도와 탄환 수 증가
  const fireInterval=Math.max(7,48-level*2);
  if(frame%fireInterval===0)enemyShoot();
 
@@ -374,7 +413,6 @@ function update(){
   if(boss.x<5||boss.x+boss.w>W-5)boss.dir*=-1;
 
   boss.fire++;
-
   if(boss.fire>Math.max(8,30-level*1.2)){
    boss.fire=0;
    const count=3+Math.floor(level/3);
@@ -398,10 +436,7 @@ function update(){
      score+=150;
      burst(boss.x+48,boss.y+25,'#c17bff',70);
      drop(boss.x+42,boss.y+40);
-     boss=null;
-     level++;
-     wave();
-     hud();
+     nextLevel();
     }
     break;
    }
@@ -421,8 +456,11 @@ function update(){
   if(overlap(drops[i],player)){
    const d=drops[i];
 
-   if(d.kind==='weapon')player.weapon=Math.min(5,player.weapon+1);
-   else lives=Math.min(5,lives+1);
+   if(d.kind==='weapon'){
+    player.weapon=Math.min(5,player.weapon+1);
+   }else{
+    lives=Math.min(MAX_LIVES,lives+1);
+   }
 
    burst(d.x,d.y,d.kind==='weapon'?'#f8d66d':'#73fbd3');
    drops.splice(i,1);
@@ -430,9 +468,8 @@ function update(){
   }
  }
 
- if(enemies.length===0&&!boss){
-  if(level%3===0)makeBoss();
-  else{level++;wave();hud();}
+ if(enemies.length===0&&!boss&&transitionTimer===0){
+  nextLevel();
  }
 
  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});
@@ -445,11 +482,41 @@ function overlay(title,line1,line2){
  g.fillStyle='#73fbd3';
  g.font='bold 24px monospace';
  g.fillText(title,W/2,H/2-36);
-
  g.fillStyle='#e8f1ff';
  g.font='14px monospace';
  g.fillText(line1,W/2,H/2+2);
  g.fillText(line2,W/2,H/2+28);
+}
+
+function drawUltimate(){
+ if(ultEffect<=0)return;
+
+ const progress=1-ultEffect/55;
+ const radius=progress*390;
+ const alpha=1-progress;
+
+ g.save();
+ g.globalAlpha=alpha;
+ g.strokeStyle='#73fbd3';
+ g.lineWidth=9-progress*6;
+ g.shadowColor='#73fbd3';
+ g.shadowBlur=30;
+
+ g.beginPath();
+ g.arc(player.x+15,player.y+15,radius,0,Math.PI*2);
+ g.stroke();
+
+ g.strokeStyle='#d9a5ff';
+ g.lineWidth=4;
+ g.beginPath();
+ g.arc(player.x+15,player.y+15,radius*.78,0,Math.PI*2);
+ g.stroke();
+
+ g.restore();
+
+ if(ultEffect>43){
+  rect(0,0,W,H,'#b9fff4');
+ }
 }
 
 function draw(){
@@ -492,11 +559,42 @@ function draw(){
 
  particles.forEach(p=>rect(p.x,p.y,p.size,p.size,p.col));
 
- if(state==='title')overlay('PIXEL DEFENDER','START 또는 ENTER로 시작','탄막을 피하고 보스를 격파하라!');
- if(state==='over')overlay('GAME OVER','SCORE '+score+'  BEST '+best,'R 또는 RESTART로 다시 도전');
- if(paused&&state==='playing')overlay('PAUSED','P 버튼으로 계속','');
+ // 궁극기 에너지 파동 애니메이션
+ drawUltimate();
 
- // 플레이어는 항상 오버레이보다 위에 그려서 잘 보이게 함
+ if(state==='title'){
+  overlay('PIXEL DEFENDER','START 또는 ENTER로 시작','Q: 궁극기 / 무기 최대 5단계');
+ }
+
+ if(state==='over'){
+  overlay('GAME OVER','SCORE '+score+' BEST '+best,'R 또는 RESTART로 다시 도전');
+ }
+
+ if(paused&&state==='playing'){
+  overlay('PAUSED','P 버튼으로 계속','');
+ }
+
+ // 레벨 전환 화면
+ if(transitionTimer>0&&state==='playing'){
+  rect(0,0,W,H,'#070b18bb');
+
+  g.textAlign='center';
+  g.shadowColor='#73fbd3';
+  g.shadowBlur=22;
+  g.fillStyle='#73fbd3';
+  g.font='bold 38px monospace';
+  g.fillText(transitionText,W/2,H/2-20);
+
+  g.shadowBlur=0;
+  g.fillStyle='#ffffff';
+  g.font='16px monospace';
+  g.fillText('GET READY!',W/2,H/2+20);
+
+  g.fillStyle='#b9c8e8';
+  g.font='13px monospace';
+  g.fillText('ENEMIES IN '+(transitionTimer/60).toFixed(1)+'s',W/2,H/2+48);
+ }
+
  if(player&&(player.inv===0||Math.floor(frame/5)%2===0)){
   ship(player.x,player.y);
   g.strokeStyle='#b8fff4';
@@ -541,7 +639,9 @@ $('pause').onclick=()=>{if(state==='playing')paused=!paused};
 c.addEventListener('pointerdown',()=>c.focus());
 
 window.addEventListener('keydown',e=>{
- if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'].includes(e.key))e.preventDefault();
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Space'].includes(e.key)){
+  e.preventDefault();
+ }
 
  keys[e.key]=true;
 
@@ -554,7 +654,9 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{keys[e.key]=false});
 
 player={x:W/2-15,y:H-65,w:30,h:30,speed:5,inv:0,weapon:1};
-shots=[];foeShots=[];enemies=[];drops=[];particles=[];boss=null;
+
+shots=[];foeShots=[];enemies=[];drops=[];particles=[];
+boss=null;
 
 hud();
 loop();
@@ -568,16 +670,15 @@ components.html(game_html,height=900,scrolling=False)
 
 with st.expander("📦 게임 기능 안내"):
     st.markdown("""
-    - 보스 몬스터: 3레벨마다 등장
-    - 무기 업그레이드: 최대 5단계
-    - Q 궁극기: 일반 적과 적 탄환 제거, 보스에게 큰 피해 (15초 재사용 대기시간)
-    - 아이템 드롭: 무기 및 회복
+    - 보스: 3레벨마다 등장
+    - 무기: 최대 5단계
+    - Q 궁극기: 에너지 파동 애니메이션, 일반 적과 탄환 제거, 보스 피해
+    - 궁극기 재사용 대기시간: 15초
+    - 레벨 전환: 중앙 레벨 표시 후 2.5초 뒤 적 생성
+    - 체력: 기본 3개, 회복으로 최대 5개
+    - 아이템: 무기 업그레이드 및 회복
     - 적 종류: 기본형, 빠른 적, 내구력 높은 적
-    - 적과 직접 충돌 시 피격
-    - 플레이어 폭발 파티클 효과
-    - 적의 탄환 수와 공격 빈도 증가
-    - 레벨에 따라 적의 속도와 보스 체력 증가
     - 최고 점수: 브라우저 localStorage 저장
     """)
 
-st.caption("PIXEL DEFENDER v5 · Streamlit + HTML Canvas")
+st.caption("PIXEL DEFENDER v6 · Streamlit + HTML Canvas")
